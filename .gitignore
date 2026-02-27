@@ -1,0 +1,59 @@
+# Entorno virtual
+venv/
+env/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+.Python
+
+# TensorFlow / Keras
+modelo_entrenado/
+*.keras
+*.h5
+*.pkl
+
+# Dataset de rostros (no subir imágenes de empleados por privacidad)
+rostros_dataset/
+
+# Variables de entorno
+.env
+.env.local
+.env.production
+
+# Base de datos
+*.sql
+*.sqlite3
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Node / React
+node_modules/
+frontend/build/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# Archivos temporales
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Archivos de prueba
+test_camara.py
