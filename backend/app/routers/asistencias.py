@@ -3,6 +3,13 @@ from app.database import get_connection
 from app.services.utils import timedelta_to_str
 from datetime import datetime, date
 
+def minutos_a_hhmm(minutos: int) -> str:
+    horas = minutos // 60
+    mins = minutos % 60
+    if horas > 0:
+        return f"{horas}h {mins:02d}min"
+    return f"{mins}min"
+
 router = APIRouter(prefix="/asistencias", tags=["Asistencias"])
 
 @router.post("/registrar/{id_empleado}")
@@ -56,7 +63,7 @@ def registrar_asistencia(id_empleado: int):
                         (cursor2.lastrowid, minutos_tarde, f"Llegó {minutos_tarde} minutos tarde")
                     )
                     conn.commit()
-                    return {"mensaje": f"Entrada registrada con retardo de {minutos_tarde} minutos", "hora": str(ahora)}
+                    return {"mensaje": f"Entrada registrada con retardo de {minutos_a_hhmm(minutos_tarde)}", "hora": str(ahora)}
 
             return {"mensaje": "Entrada registrada exitosamente", "hora": str(ahora)}
 
@@ -89,7 +96,7 @@ def registrar_asistencia(id_empleado: int):
                     (asistencia["id_asistencia"], exceso, f"Se excedió {exceso} minutos en el almuerzo")
                 )
                 conn.commit()
-                return {"mensaje": f"Regreso registrado con {exceso} minutos de exceso en almuerzo", "hora": str(ahora)}
+                return {"mensaje": f"Regreso registrado con {minutos_a_hhmm(exceso)} de exceso en almuerzo", "hora": str(ahora)}
 
             return {"mensaje": "Regreso de almuerzo registrado", "hora": str(ahora)}
 
@@ -122,7 +129,7 @@ def registrar_asistencia(id_empleado: int):
                         (asistencia["id_asistencia"], minutos_antes, f"Salió {minutos_antes} minutos antes")
                     )
                     conn.commit()
-                    return {"mensaje": f"Salida registrada con {minutos_antes} minutos anticipados", "horas_trabajadas": horas_trabajadas}
+                    return {"mensaje": f"Salida registrada con {minutos_a_hhmm(minutos_antes)} anticipados", "horas_trabajadas": horas_trabajadas}
 
             return {"mensaje": "Salida final registrada exitosamente", "horas_trabajadas": horas_trabajadas}
 
@@ -142,8 +149,8 @@ def asistencias_hoy():
     cursor = conn.cursor(dictionary=True)
     hoy = date.today()
     cursor.execute("""
-        SELECT e.nombres, e.apellidos, a.fecha, a.hora_entrada, a.hora_salida_almuerzo,
-               a.hora_regreso_almuerzo, a.hora_salida, a.horas_trabajadas, a.estado
+        SELECT a.id_asistencia, e.nombres, e.apellidos, a.fecha, a.hora_entrada, a.hora_salida_almuerzo,
+            a.hora_regreso_almuerzo, a.hora_salida, a.horas_trabajadas, a.estado
         FROM asistencias a
         JOIN empleados e ON a.id_empleado = e.id_empleado
         WHERE a.fecha = %s

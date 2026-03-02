@@ -1,8 +1,17 @@
 from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from app.routers import empleados, horarios, asistencias, reportes, auth
 from app.services.auth import verificar_token
 
 app = FastAPI(title="SIA - Sistema de Asistencia", version="1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(auth.router)
 
