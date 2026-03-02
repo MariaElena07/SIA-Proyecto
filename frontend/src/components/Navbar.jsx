@@ -28,6 +28,9 @@ export default function Navbar() {
             <li className="nav-item">
               <NavLink className="nav-link" to="/reportes">Reportes</NavLink>
             </li>
+            <li className="nav-item">
+              <NavLink className="nav-link" to="/reconocimiento">Reconocimiento</NavLink>
+            </li>
           </ul>
           <button className="btn btn-outline-light btn-sm" onClick={handleLogout}>
             Cerrar sesión

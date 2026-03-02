@@ -2,25 +2,28 @@ import cv2
 import numpy as np
 import pickle
 import requests
+import time
+import threading
 from keras import models
 from PIL import Image
 
-# Cargar modelo y etiquetas
+_hilo = None
+_corriendo = False
+
 def cargar_modelo():
     modelo = models.load_model("modelo_entrenado/modelo_sia.keras")
     with open("modelo_entrenado/etiquetas.pkl", "rb") as f:
         etiquetas = pickle.load(f)
     return modelo, etiquetas
 
-def reconocer_en_tiempo_real():
+def _ejecutar():
+    global _corriendo
     modelo, le = cargar_modelo()
     detector = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
     camara = cv2.VideoCapture(0)
+    ultimo_registro = {}
 
-    print("Sistema de reconocimiento activo. Presiona Q para salir.")
-    ultimo_registro = {}  # Para evitar registros duplicados seguidos
-
-    while True:
+    while _corriendo:
         ret, frame = camara.read()
         if not ret:
             break
@@ -42,9 +45,6 @@ def reconocer_en_tiempo_real():
             if confianza >= 0.85:
                 color = (0, 255, 0)
                 texto = f"ID: {id_empleado} ({confianza*100:.1f}%)"
-
-                # Registrar asistencia si no se registró en los últimos 5 segundos
-                import time
                 ahora = time.time()
                 if id_empleado not in ultimo_registro or (ahora - ultimo_registro[id_empleado]) > 5:
                     try:
@@ -62,13 +62,27 @@ def reconocer_en_tiempo_real():
             cv2.putText(frame, texto, (x, y-10),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
-        cv2.imshow("SIA - Reconocimiento Facial (Q para salir)", frame)
-
+        cv2.imshow("SIA - Reconocimiento Facial", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
+    _corriendo = False
     camara.release()
     cv2.destroyAllWindows()
 
-if __name__ == "__main__":
-    reconocer_en_tiempo_real()
+def iniciar():
+    global _hilo, _corriendo
+    if _corriendo:
+        return False
+    _corriendo = True
+    _hilo = threading.Thread(target=_ejecutar, daemon=True)
+    _hilo.start()
+    return True
+
+def detener():
+    global _corriendo
+    _corriendo = False
+    return True
+
+def estado():
+    return _corriendo

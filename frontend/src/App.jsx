@@ -6,6 +6,7 @@ import Empleados from './pages/Empleados'
 import Horarios from './pages/Horarios'
 import Asistencias from './pages/Asistencias'
 import Reportes from './pages/Reportes'
+import Reconocimiento from './pages/Reconocimiento'
 
 function RutaProtegida({ children }) {
   const { token } = useAuth()
@@ -22,6 +23,7 @@ function App() {
           <Route path="/horarios" element={<RutaProtegida><Horarios /></RutaProtegida>} />
           <Route path="/asistencias" element={<RutaProtegida><Asistencias /></RutaProtegida>} />
           <Route path="/reportes" element={<RutaProtegida><Reportes /></RutaProtegida>} />
+          <Route path="/reconocimiento" element={<RutaProtegida><Reconocimiento /></RutaProtegida>} />
           <Route path="*" element={<Navigate to="/login" />} />
         </Routes>
       </BrowserRouter>
