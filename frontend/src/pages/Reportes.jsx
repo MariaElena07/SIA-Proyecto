@@ -7,6 +7,7 @@ export default function Reportes() {
   const [empleados, setEmpleados] = useState([])
   const [tab, setTab] = useState('asistencias')
   const [mensaje, setMensaje] = useState('')
+  const [tipoMensaje, setTipoMensaje] = useState('success')
   const [cargando, setCargando] = useState(false)
 
   const hoy = new Date().toISOString().split('T')[0]
@@ -16,7 +17,6 @@ export default function Reportes() {
   const [asistencias, setAsistencias] = useState([])
   const [incidencias, setIncidencias] = useState([])
   const [resumen, setResumen] = useState(null)
-
   const [editando, setEditando] = useState(null)
   const [nuevaObservacion, setNuevaObservacion] = useState('')
 
@@ -27,6 +27,12 @@ export default function Reportes() {
       const r = await api.get('/empleados/')
       setEmpleados(r.data)
     } catch (err) { console.error(err) }
+  }
+
+  const mostrarMensaje = (texto, tipo = 'success') => {
+    setMensaje(texto)
+    setTipoMensaje(tipo)
+    setTimeout(() => setMensaje(''), 3000)
   }
 
   const formatearHora = (hora) => {
@@ -50,7 +56,7 @@ export default function Reportes() {
       const r = await api.get('/reportes/asistencias', { params })
       setAsistencias(r.data)
     } catch (err) {
-      setMensaje('Error al cargar reporte')
+      mostrarMensaje('Error al cargar reporte', 'error')
     } finally {
       setCargando(false)
     }
@@ -65,7 +71,7 @@ export default function Reportes() {
       const r = await api.get('/reportes/incidencias', { params })
       setIncidencias(r.data)
     } catch (err) {
-      setMensaje('Error al cargar incidencias')
+      mostrarMensaje('Error al cargar incidencias', 'error')
     } finally {
       setCargando(false)
     }
@@ -80,7 +86,7 @@ export default function Reportes() {
       })
       setResumen(r.data)
     } catch (err) {
-      setMensaje('Error al cargar resumen')
+      mostrarMensaje('Error al cargar resumen', 'error')
     } finally {
       setCargando(false)
     }
@@ -89,273 +95,301 @@ export default function Reportes() {
   const handleEditar = async (id) => {
     try {
       await api.put(`/reportes/incidencias/${id}`, { observacion: nuevaObservacion })
-      setMensaje('Incidencia actualizada')
+      mostrarMensaje('Incidencia actualizada')
       setEditando(null)
       buscarIncidencias({ preventDefault: () => {} })
     } catch (err) {
-      setMensaje('Error al actualizar incidencia')
+      mostrarMensaje('Error al actualizar', 'error')
     }
   }
 
-  const filtroForm = (onSubmit) => (
-    <form onSubmit={onSubmit} className="row g-2 mb-4 align-items-end">
-      <div className="col-md-3">
-        <label className="form-label">Fecha inicio</label>
-        <input type="date" className="form-control" value={filtros.fecha_inicio}
-          onChange={(e) => setFiltros({ ...filtros, fecha_inicio: e.target.value })} required />
-      </div>
-      <div className="col-md-3">
-        <label className="form-label">Fecha fin</label>
-        <input type="date" className="form-control" value={filtros.fecha_fin}
-          onChange={(e) => setFiltros({ ...filtros, fecha_fin: e.target.value })} required />
-      </div>
-      <div className="col-md-4">
-        <label className="form-label">Empleado (opcional)</label>
-        <select className="form-select" value={filtros.id_empleado}
-          onChange={(e) => setFiltros({ ...filtros, id_empleado: e.target.value })}>
-          <option value="">Todos</option>
-          {empleados.map((emp) => (
-            <option key={emp.id_empleado} value={emp.id_empleado}>
-              {emp.nombres} {emp.apellidos}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="col-md-2">
-        <button type="submit" className="btn btn-primary w-100" disabled={cargando}>
-          {cargando ? 'Buscando...' : 'Buscar'}
-        </button>
-      </div>
-    </form>
-  )
-
   const exportarAsistencias = () => {
-  const datos = asistencias.map((a) => ({
-    Empleado: `${a.nombres} ${a.apellidos}`,
-    Fecha: a.fecha,
-    Entrada: formatearHora(a.hora_entrada),
-    'Salida Almuerzo': formatearHora(a.hora_salida_almuerzo),
-    'Regreso Almuerzo': formatearHora(a.hora_regreso_almuerzo),
-    'Salida Final': formatearHora(a.hora_salida),
-    'Horas Trabajadas': a.horas_trabajadas ?? 0,
-    Estado: a.estado
-  }))
-  
-  const hoja = XLSX.utils.json_to_sheet(datos)
-  const libro = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(libro, hoja, 'Asistencias')
-  const buffer = XLSX.write(libro, { bookType: 'xlsx', type: 'array' })
-  saveAs(new Blob([buffer]), 'reporte_asistencias.xlsx')
+    const datos = asistencias.map((a) => ({
+      Empleado: `${a.nombres} ${a.apellidos}`,
+      Fecha: a.fecha,
+      Entrada: formatearHora(a.hora_entrada),
+      'Salida Almuerzo': formatearHora(a.hora_salida_almuerzo),
+      'Regreso Almuerzo': formatearHora(a.hora_regreso_almuerzo),
+      'Salida Final': formatearHora(a.hora_salida),
+      'Horas Trabajadas': a.horas_trabajadas ?? 0,
+      Estado: a.estado
+    }))
+    const hoja = XLSX.utils.json_to_sheet(datos)
+    const libro = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(libro, hoja, 'Asistencias')
+    saveAs(new Blob([XLSX.write(libro, { bookType: 'xlsx', type: 'array' })]), 'reporte_asistencias.xlsx')
   }
 
   const exportarIncidencias = () => {
     const datos = incidencias.map((inc) => ({
-    Empleado: `${inc.nombres} ${inc.apellidos}`,
-    Fecha: inc.fecha,
-    Tipo: inc.tipo,
-    Duración: minutosAHHMM(inc.minutos),
-    Observación: inc.observacion
-  }))
-  
+      Empleado: `${inc.nombres} ${inc.apellidos}`,
+      Fecha: inc.fecha,
+      Tipo: inc.tipo,
+      Duración: minutosAHHMM(inc.minutos),
+      Observación: inc.observacion
+    }))
     const hoja = XLSX.utils.json_to_sheet(datos)
     const libro = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(libro, hoja, 'Incidencias')
-    const buffer = XLSX.write(libro, { bookType: 'xlsx', type: 'array' })
-    saveAs(new Blob([buffer]), 'reporte_incidencias.xlsx')
+    saveAs(new Blob([XLSX.write(libro, { bookType: 'xlsx', type: 'array' })]), 'reporte_incidencias.xlsx')
   }
+
+  const inputClass = "px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+  const labelClass = "block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+
+  const tabs = [
+    { id: 'asistencias', label: 'Asistencias' },
+    { id: 'incidencias', label: 'Incidencias' },
+    { id: 'resumen', label: 'Resumen' },
+  ]
+
+  const FiltroBar = ({ onSubmit, mostrarExportar, onExportar }) => (
+    <form onSubmit={onSubmit} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-4 mb-6">
+      <div className="flex flex-wrap gap-4 items-end">
+        <div>
+          <label className={labelClass}>Fecha inicio</label>
+          <input type="date" className={inputClass} value={filtros.fecha_inicio}
+            onChange={(e) => setFiltros({ ...filtros, fecha_inicio: e.target.value })} required />
+        </div>
+        <div>
+          <label className={labelClass}>Fecha fin</label>
+          <input type="date" className={inputClass} value={filtros.fecha_fin}
+            onChange={(e) => setFiltros({ ...filtros, fecha_fin: e.target.value })} required />
+        </div>
+        <div>
+          <label className={labelClass}>Empleado</label>
+          <select className={inputClass} value={filtros.id_empleado}
+            onChange={(e) => setFiltros({ ...filtros, id_empleado: e.target.value })}>
+            <option value="">Todos</option>
+            {empleados.map((emp) => (
+              <option key={emp.id_empleado} value={emp.id_empleado}>
+                {emp.nombres} {emp.apellidos}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button type="submit" disabled={cargando}
+          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors">
+          {cargando ? 'Buscando...' : 'Buscar'}
+        </button>
+        {mostrarExportar && (
+          <button type="button" onClick={onExportar}
+            className="px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-medium transition-colors">
+            ⬇ Excel
+          </button>
+        )}
+      </div>
+    </form>
+  )
 
   return (
     <div>
-      <h4 className="mb-3">Reportes</h4>
-      {mensaje && <div className="alert alert-info py-2">{mensaje}</div>}
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Reportes</h1>
+        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Consulta y exporta información del sistema</p>
+      </div>
 
-      <ul className="nav nav-tabs mb-4">
-        <li className="nav-item">
-          <button className={`nav-link ${tab === 'asistencias' ? 'active' : ''}`} onClick={() => setTab('asistencias')}>Asistencias</button>
-        </li>
-        <li className="nav-item">
-          <button className={`nav-link ${tab === 'incidencias' ? 'active' : ''}`} onClick={() => setTab('incidencias')}>Incidencias</button>
-        </li>
-        <li className="nav-item">
-          <button className={`nav-link ${tab === 'resumen' ? 'active' : ''}`} onClick={() => setTab('resumen')}>Resumen por Empleado</button>
-        </li>
-      </ul>
+      {mensaje && (
+        <div className={`mb-4 px-4 py-3 rounded-xl text-sm font-medium ${
+          tipoMensaje === 'success'
+            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+            : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+        }`}>
+          {mensaje}
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="flex gap-1 mb-6 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit">
+        {tabs.map((t) => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              tab === t.id
+                ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+            }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
 
       {/* ASISTENCIAS */}
       {tab === 'asistencias' && (
         <div>
-          {filtroForm(buscarAsistencias)}
-          {asistencias.length > 0 && (
-            <button className="btn btn-success btn-sm mb-3" onClick={exportarAsistencias}>
-              ⬇ Exportar a Excel
-            </button>
-          )}
-          <table className="table table-bordered table-hover">
-            <thead className="table-primary">
-              <tr>
-                <th>Empleado</th>
-                <th>Fecha</th>
-                <th>Entrada</th>
-                <th>S. Almuerzo</th>
-                <th>R. Almuerzo</th>
-                <th>Salida</th>
-                <th>Horas</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {asistencias.length === 0 ? (
-                <tr><td colSpan="8" className="text-center">Sin resultados</td></tr>
-              ) : (
-                asistencias.map((a, i) => (
-                  <tr key={i}>
-                    <td>{a.nombres} {a.apellidos}</td>
-                    <td>{a.fecha}</td>
-                    <td>{formatearHora(a.hora_entrada)}</td>
-                    <td>{formatearHora(a.hora_salida_almuerzo)}</td>
-                    <td>{formatearHora(a.hora_regreso_almuerzo)}</td>
-                    <td>{formatearHora(a.hora_salida)}</td>
-                    <td>{a.horas_trabajadas ?? '—'}</td>
-                    <td>
-                      <span className={`badge ${a.estado === 'completo' ? 'bg-success' : 'bg-warning text-dark'}`}>
-                        {a.estado}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+          <FiltroBar onSubmit={buscarAsistencias} mostrarExportar={asistencias.length > 0} onExportar={exportarAsistencias} />
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
+                  {['Empleado', 'Fecha', 'Entrada', 'S. Almuerzo', 'R. Almuerzo', 'Salida', 'Horas', 'Estado'].map(h => (
+                    <th key={h} className="px-6 py-4 font-medium">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {asistencias.length === 0 ? (
+                  <tr><td colSpan="8" className="px-6 py-8 text-center text-gray-400">Selecciona un rango de fechas y presiona Buscar</td></tr>
+                ) : (
+                  asistencias.map((a, i) => (
+                    <tr key={i} className="border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                      <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{a.nombres} {a.apellidos}</td>
+                      <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{a.fecha}</td>
+                      <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{formatearHora(a.hora_entrada)}</td>
+                      <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{formatearHora(a.hora_salida_almuerzo)}</td>
+                      <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{formatearHora(a.hora_regreso_almuerzo)}</td>
+                      <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{formatearHora(a.hora_salida)}</td>
+                      <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{a.horas_trabajadas ?? '—'}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                          a.estado === 'completo'
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                            : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                        }`}>{a.estado}</span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       {/* INCIDENCIAS */}
       {tab === 'incidencias' && (
         <div>
-          {filtroForm(buscarIncidencias)}
-          {incidencias.length > 0 && (
-            <button className="btn btn-success btn-sm mb-3" onClick={exportarIncidencias}>
-              ⬇ Exportar a Excel
-            </button>
-          )}
-          <table className="table table-bordered table-hover">
-            <thead className="table-primary">
-              <tr>
-                <th>Empleado</th>
-                <th>Fecha</th>
-                <th>Tipo</th>
-                <th>Duración</th>
-                <th>Observación</th>
-                <th>Acción</th>
-              </tr>
-            </thead>
-            <tbody>
-              {incidencias.length === 0 ? (
-                <tr><td colSpan="6" className="text-center">Sin resultados</td></tr>
-              ) : (
-                incidencias.map((inc) => (
-                  <tr key={inc.id_incidencia}>
-                    <td>{inc.nombres} {inc.apellidos}</td>
-                    <td>{inc.fecha}</td>
-                    <td><span className="badge bg-danger">{inc.tipo}</span></td>
-                    <td>{minutosAHHMM(inc.minutos)}</td>
-                    <td>
-                      {editando === inc.id_incidencia ? (
-                        <input type="text" className="form-control form-control-sm"
-                          value={nuevaObservacion}
-                          onChange={(e) => setNuevaObservacion(e.target.value)} />
-                      ) : inc.observacion}
-                    </td>
-                    <td>
-                      {editando === inc.id_incidencia ? (
-                        <div className="d-flex gap-1">
-                          <button className="btn btn-success btn-sm" onClick={() => handleEditar(inc.id_incidencia)}>Guardar</button>
-                          <button className="btn btn-secondary btn-sm" onClick={() => setEditando(null)}>Cancelar</button>
-                        </div>
-                      ) : (
-                        <button className="btn btn-outline-primary btn-sm"
-                          onClick={() => { setEditando(inc.id_incidencia); setNuevaObservacion(inc.observacion) }}>
-                          Editar
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+          <FiltroBar onSubmit={buscarIncidencias} mostrarExportar={incidencias.length > 0} onExportar={exportarIncidencias} />
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
+                  {['Empleado', 'Fecha', 'Tipo', 'Duración', 'Observación', 'Acción'].map(h => (
+                    <th key={h} className="px-6 py-4 font-medium">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {incidencias.length === 0 ? (
+                  <tr><td colSpan="6" className="px-6 py-8 text-center text-gray-400">Selecciona un rango de fechas y presiona Buscar</td></tr>
+                ) : (
+                  incidencias.map((inc) => (
+                    <tr key={inc.id_incidencia} className="border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                      <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{inc.nombres} {inc.apellidos}</td>
+                      <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{inc.fecha}</td>
+                      <td className="px-6 py-4">
+                        <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                          {inc.tipo}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{minutosAHHMM(inc.minutos)}</td>
+                      <td className="px-6 py-4 text-gray-600 dark:text-gray-400">
+                        {editando === inc.id_incidencia ? (
+                          <input type="text" value={nuevaObservacion}
+                            onChange={(e) => setNuevaObservacion(e.target.value)}
+                            className="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                        ) : inc.observacion}
+                      </td>
+                      <td className="px-6 py-4">
+                        {editando === inc.id_incidencia ? (
+                          <div className="flex gap-2">
+                            <button onClick={() => handleEditar(inc.id_incidencia)}
+                              className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-medium transition-colors">
+                              Guardar
+                            </button>
+                            <button onClick={() => setEditando(null)}
+                              className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded-lg text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                              Cancelar
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => { setEditando(inc.id_incidencia); setNuevaObservacion(inc.observacion) }}
+                            className="px-3 py-1.5 border border-indigo-200 dark:border-indigo-700 text-indigo-600 dark:text-indigo-400 rounded-lg text-xs font-medium hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors">
+                            Editar
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       {/* RESUMEN */}
       {tab === 'resumen' && (
         <div>
-          <form onSubmit={buscarResumen} className="row g-2 mb-4 align-items-end">
-            <div className="col-md-4">
-              <label className="form-label">Empleado</label>
-              <select className="form-select" value={filtrosResumen.id_empleado}
-                onChange={(e) => setFiltrosResumen({ ...filtrosResumen, id_empleado: e.target.value })} required>
-                <option value="">Seleccionar empleado</option>
-                {empleados.map((emp) => (
-                  <option key={emp.id_empleado} value={emp.id_empleado}>
-                    {emp.nombres} {emp.apellidos}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="col-md-3">
-              <label className="form-label">Fecha inicio</label>
-              <input type="date" className="form-control" value={filtrosResumen.fecha_inicio}
-                onChange={(e) => setFiltrosResumen({ ...filtrosResumen, fecha_inicio: e.target.value })} required />
-            </div>
-            <div className="col-md-3">
-              <label className="form-label">Fecha fin</label>
-              <input type="date" className="form-control" value={filtrosResumen.fecha_fin}
-                onChange={(e) => setFiltrosResumen({ ...filtrosResumen, fecha_fin: e.target.value })} required />
-            </div>
-            <div className="col-md-2">
-              <button type="submit" className="btn btn-primary w-100" disabled={cargando}>Buscar</button>
+          <form onSubmit={buscarResumen} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-4 mb-6">
+            <div className="flex flex-wrap gap-4 items-end">
+              <div>
+                <label className={labelClass}>Empleado</label>
+                <select className={inputClass} value={filtrosResumen.id_empleado}
+                  onChange={(e) => setFiltrosResumen({ ...filtrosResumen, id_empleado: e.target.value })} required>
+                  <option value="">Seleccionar empleado</option>
+                  {empleados.map((emp) => (
+                    <option key={emp.id_empleado} value={emp.id_empleado}>
+                      {emp.nombres} {emp.apellidos}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Fecha inicio</label>
+                <input type="date" className={inputClass} value={filtrosResumen.fecha_inicio}
+                  onChange={(e) => setFiltrosResumen({ ...filtrosResumen, fecha_inicio: e.target.value })} required />
+              </div>
+              <div>
+                <label className={labelClass}>Fecha fin</label>
+                <input type="date" className={inputClass} value={filtrosResumen.fecha_fin}
+                  onChange={(e) => setFiltrosResumen({ ...filtrosResumen, fecha_fin: e.target.value })} required />
+              </div>
+              <button type="submit" disabled={cargando}
+                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors">
+                {cargando ? 'Buscando...' : 'Buscar'}
+              </button>
             </div>
           </form>
 
           {resumen && (
-            <div className="row g-3">
-              <div className="col-md-4">
-                <div className="card p-3 text-center">
-                  <h6>Días asistidos</h6>
-                  <h2 className="text-primary">{resumen.resumen_asistencia.dias_asistidos}</h2>
-                </div>
-              </div>
-              <div className="col-md-4">
-                <div className="card p-3 text-center">
-                  <h6>Total horas trabajadas</h6>
-                  <h2 className="text-success">{resumen.resumen_asistencia.total_horas ?? 0}</h2>
-                </div>
-              </div>
-              <div className="col-md-4">
-                <div className="card p-3 text-center">
-                  <h6>Días incompletos</h6>
-                  <h2 className="text-warning">{resumen.resumen_asistencia.dias_incompletos}</h2>
-                </div>
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {[
+                  { label: 'Días asistidos', valor: resumen.resumen_asistencia.dias_asistidos, color: 'text-indigo-600 dark:text-indigo-400' },
+                  { label: 'Total horas trabajadas', valor: resumen.resumen_asistencia.total_horas ?? 0, color: 'text-green-600 dark:text-green-400' },
+                  { label: 'Días incompletos', valor: resumen.resumen_asistencia.dias_incompletos, color: 'text-amber-600 dark:text-amber-400' },
+                ].map((item) => (
+                  <div key={item.label} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-5 text-center">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{item.label}</p>
+                    <p className={`text-3xl font-bold mt-1 ${item.color}`}>{item.valor}</p>
+                  </div>
+                ))}
               </div>
 
               {resumen.incidencias_por_tipo.length > 0 && (
-                <div className="col-12">
-                  <h6 className="mt-2">Incidencias por tipo</h6>
-                  <table className="table table-bordered">
-                    <thead className="table-secondary">
-                      <tr>
-                        <th>Tipo</th>
-                        <th>Cantidad</th>
-                        <th>Total tiempo</th>
+                <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                  <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+                    <h3 className="font-semibold text-gray-900 dark:text-white">Incidencias por tipo</h3>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
+                        <th className="px-6 py-4 font-medium">Tipo</th>
+                        <th className="px-6 py-4 font-medium">Cantidad</th>
+                        <th className="px-6 py-4 font-medium">Total tiempo</th>
                       </tr>
                     </thead>
                     <tbody>
                       {resumen.incidencias_por_tipo.map((inc, i) => (
-                        <tr key={i}>
-                          <td><span className="badge bg-danger">{inc.tipo}</span></td>
-                          <td>{inc.cantidad}</td>
-                          <td>{minutosAHHMM(inc.total_minutos)}</td>
+                        <tr key={i} className="border-b border-gray-50 dark:border-gray-800">
+                          <td className="px-6 py-4">
+                            <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                              {inc.tipo}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{inc.cantidad}</td>
+                          <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{minutosAHHMM(inc.total_minutos)}</td>
                         </tr>
                       ))}
                     </tbody>

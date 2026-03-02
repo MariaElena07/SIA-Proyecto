@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers import empleados, horarios, asistencias, reportes, auth
 from app.services.auth import verificar_token
 from app.routers import reconocimiento
+from app.routers import captura
 
 app = FastAPI(title="SIA - Sistema de Asistencia", version="1.0")
 
@@ -21,7 +22,7 @@ app.include_router(empleados.router, dependencies=[Depends(verificar_token)])
 app.include_router(horarios.router, dependencies=[Depends(verificar_token)])
 app.include_router(reportes.router, dependencies=[Depends(verificar_token)])
 app.include_router(reconocimiento.router, dependencies=[Depends(verificar_token)])
-
+app.include_router(captura.router, dependencies=[Depends(verificar_token)])
 app.include_router(asistencias.router)
 
 @app.get("/")
