@@ -27,8 +27,10 @@ export default function Empleados() {
   const [totalFotos, setTotalFotos] = useState(0)
   const [capturando, setCapturando] = useState(false)
   const [entrenando, setEntrenando] = useState(false)
+  const [eliminando, setEliminando] = useState(false)
   const [mensajeCaptura, setMensajeCaptura] = useState('')
   const [tipoMensajeCaptura, setTipoMensajeCaptura] = useState('success')
+  const [confirmarEliminar, setConfirmarEliminar] = useState(false)
   const videoCapRef = useRef(null)
   const canvasCapRef = useRef(null)
   const streamRef = useRef(null)
@@ -68,6 +70,7 @@ export default function Empleados() {
   const abrirCaptura = async (emp) => {
     setEmpleadoCaptura(emp)
     setMensajeCaptura('')
+    setConfirmarEliminar(false)
     setModalCaptura(true)
     try {
       const r = await api.get(`/captura/fotos/${emp.id_empleado}`)
@@ -95,6 +98,7 @@ export default function Empleados() {
     setEmpleadoCaptura(null)
     setTotalFotos(0)
     setMensajeCaptura('')
+    setConfirmarEliminar(false)
   }
 
   const tomarFoto = async () => {
@@ -138,6 +142,22 @@ export default function Empleados() {
     }
     setMensajeCaptura(`✓ ${guardadas} fotos subidas`)
     setTipoMensajeCaptura('success')
+  }
+
+  const eliminarFotos = async () => {
+    setEliminando(true)
+    try {
+      const r = await api.delete(`/captura/fotos/${empleadoCaptura.id_empleado}`)
+      setTotalFotos(0)
+      setConfirmarEliminar(false)
+      setMensajeCaptura(`✓ ${r.data.total_eliminadas} fotos eliminadas. Ahora puedes capturar nuevas fotos.`)
+      setTipoMensajeCaptura('success')
+    } catch (err) {
+      setMensajeCaptura('Error al eliminar fotos')
+      setTipoMensajeCaptura('error')
+    } finally {
+      setEliminando(false)
+    }
   }
 
   const handleEntrenar = async () => {
@@ -358,6 +378,39 @@ export default function Empleados() {
                   >
                     {entrenando ? 'Entrenando...' : '🧠 Entrenar modelo'}
                   </button>
+
+                  {/* Eliminar fotos */}
+                  {totalFotos > 0 && (
+                    confirmarEliminar ? (
+                      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3">
+                        <p className="text-xs text-red-700 dark:text-red-400 mb-2 text-center font-medium">
+                          ¿Eliminar las {totalFotos} fotos?
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setConfirmarEliminar(false)}
+                            className="flex-1 py-1.5 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded-lg text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={eliminarFotos}
+                            disabled={eliminando}
+                            className="flex-1 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors"
+                          >
+                            {eliminando ? 'Eliminando...' : 'Confirmar'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmarEliminar(true)}
+                        className="w-full py-2.5 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-400 rounded-xl text-sm font-medium hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                      >
+                        🗑️ Eliminar fotos
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
             </div>

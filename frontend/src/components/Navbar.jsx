@@ -8,7 +8,7 @@ const menuItems = [
   { to: '/horarios', icon: <i className="fi fi-rs-clock"></i>, label: 'Horarios' },
   { to: '/asistencias', icon: <i className="fi fi-rs-calendar-check"></i>, label: 'Asistencias' },
   { to: '/reportes', icon: <i className="fi fi-rs-chart-histogram"></i>, label: 'Reportes' },
-  { to: '/reconocimiento', icon: <i className="fi fi-rs-camera"></i>, label: 'Reconocimiento' },
+  // { to: '/reconocimiento', icon: <i className="fi fi-rs-camera"></i>, label: 'Reconocimiento' },
   { to: '/quiosco', icon: <i className="fi fi-rs-computer"></i>, label: 'Quiosco' },
 ]
 

@@ -4,21 +4,35 @@ import pickle
 import requests
 import time
 import threading
-from keras import models
+from keras import models, Model
 from PIL import Image
 
 _hilo = None
 _corriendo = False
 
+UMBRAL_CONFIANZA = 0.99
+UMBRAL_DISTANCIA = 10.0
+
 def cargar_modelo():
     modelo = models.load_model("modelo_entrenado/modelo_sia.keras")
     with open("modelo_entrenado/etiquetas.pkl", "rb") as f:
         etiquetas = pickle.load(f)
-    return modelo, etiquetas
+    with open("modelo_entrenado/embeddings.pkl", "rb") as f:
+        embeddings = pickle.load(f)
+    modelo_embedding = Model(inputs=modelo.input, outputs=modelo.layers[-2].output)
+    return modelo, modelo_embedding, etiquetas, embeddings
+
+def verificar_distancia(modelo_embedding, rostro_input, id_empleado, embeddings):
+    emb = modelo_embedding.predict(rostro_input, verbose=0)[0]
+    centroide = embeddings.get(str(id_empleado))
+    if centroide is None:
+        return False, 999
+    distancia = np.linalg.norm(emb - centroide)
+    return distancia <= UMBRAL_DISTANCIA, distancia
 
 def _ejecutar():
     global _corriendo
-    modelo, le = cargar_modelo()
+    modelo, modelo_embedding, le, embeddings = cargar_modelo()
     detector = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
     camara = cv2.VideoCapture(0)
     ultimo_registro = {}
@@ -42,18 +56,23 @@ def _ejecutar():
             clase = np.argmax(prediccion)
             id_empleado = le.inverse_transform([clase])[0]
 
-            if confianza >= 0.85:
-                color = (0, 255, 0)
-                texto = f"ID: {id_empleado} ({confianza*100:.1f}%)"
-                ahora = time.time()
-                if id_empleado not in ultimo_registro or (ahora - ultimo_registro[id_empleado]) > 5:
-                    try:
-                        resp = requests.post(f"http://127.0.0.1:8000/asistencias/registrar/{id_empleado}")
-                        mensaje = resp.json().get("mensaje", "")
-                        print(f"✅ {texto} - {mensaje}")
-                        ultimo_registro[id_empleado] = ahora
-                    except Exception as e:
-                        print(f"Error al registrar: {e}")
+            if confianza >= UMBRAL_CONFIANZA:
+                valido, distancia = verificar_distancia(modelo_embedding, rostro_input, id_empleado, embeddings)
+                if valido:
+                    color = (0, 255, 0)
+                    texto = f"ID: {id_empleado} ({confianza*100:.1f}%)"
+                    ahora = time.time()
+                    if id_empleado not in ultimo_registro or (ahora - ultimo_registro[id_empleado]) > 5:
+                        try:
+                            resp = requests.post(f"http://127.0.0.1:8000/asistencias/registrar/{id_empleado}")
+                            mensaje = resp.json().get("mensaje", "")
+                            print(f"✅ {texto} - dist:{distancia:.1f} - {mensaje}")
+                            ultimo_registro[id_empleado] = ahora
+                        except Exception as e:
+                            print(f"Error al registrar: {e}")
+                else:
+                    color = (0, 165, 255)
+                    texto = f"Sospechoso ({confianza*100:.1f}% dist:{distancia:.1f})"
             else:
                 color = (0, 0, 255)
                 texto = f"Desconocido ({confianza*100:.1f}%)"

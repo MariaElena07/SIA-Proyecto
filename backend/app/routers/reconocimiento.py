@@ -52,7 +52,7 @@ async def identificar(payload: dict):
             clase = np.argmax(prediccion)
             id_empleado = int(le.inverse_transform([clase])[0])
 
-            if confianza >= 0.85:
+            if confianza >= 0.97:
                 # Obtener nombre del empleado
                 conn = get_connection()
                 cursor = conn.cursor(dictionary=True)

@@ -20,6 +20,10 @@ export default function Reportes() {
   const [editando, setEditando] = useState(null)
   const [nuevaObservacion, setNuevaObservacion] = useState('')
 
+  const [ausencias, setAusencias] = useState([])
+  const [registrando, setRegistrando] = useState(false)
+  const [resultadoRegistro, setResultadoRegistro] = useState(null)
+
   useEffect(() => { cargarEmpleados() }, [])
 
   const cargarEmpleados = async () => {
@@ -134,12 +138,91 @@ export default function Reportes() {
     saveAs(new Blob([XLSX.write(libro, { bookType: 'xlsx', type: 'array' })]), 'reporte_incidencias.xlsx')
   }
 
+  const exportarReporteCompleto = async () => {
+    setCargando(true)
+    try {
+      const params = { fecha_inicio: filtros.fecha_inicio, fecha_fin: filtros.fecha_fin }
+
+      const [resAsistencias, resIncidencias, resAusencias] = await Promise.all([
+        api.get('/reportes/asistencias', { params }),
+        api.get('/reportes/incidencias', { params }),
+        api.get('/reportes/ausencias', { params }),
+      ])
+
+      const resumenes = []
+      for (const emp of empleados) {
+        try {
+          const r = await api.get(`/reportes/resumen/${emp.id_empleado}`, { params })
+          resumenes.push({
+            Empleado: `${emp.nombres} ${emp.apellidos}`,
+            'Días asistidos': r.data.resumen.dias_asistidos,
+            'Días ausentes': r.data.resumen.dias_ausentes,
+            'Días libres': r.data.resumen.dias_libres,
+            'Total horas': r.data.resumen.total_horas,
+            'Tardanzas': r.data.resumen.tardanzas,
+            'Almuerzos extendidos': r.data.resumen.almuerzos_extendidos,
+            'Salidas anticipadas': r.data.resumen.salidas_anticipadas,
+            'Días incompletos': r.data.resumen.dias_incompletos,
+          })
+        } catch (err) { /* empleado sin datos */ }
+      }
+
+      const hojaAsistencias = XLSX.utils.json_to_sheet(
+        resAsistencias.data.map(a => ({
+          Empleado: `${a.nombres} ${a.apellidos}`,
+          Fecha: a.fecha,
+          Entrada: formatearHora(a.hora_entrada),
+          'Salida Almuerzo': formatearHora(a.hora_salida_almuerzo),
+          'Regreso Almuerzo': formatearHora(a.hora_regreso_almuerzo),
+          'Salida Final': formatearHora(a.hora_salida),
+          'Horas Trabajadas': a.horas_trabajadas ?? 0,
+          Estado: a.estado
+        }))
+      )
+
+      const hojaIncidencias = XLSX.utils.json_to_sheet(
+        resIncidencias.data.map(inc => ({
+          Empleado: `${inc.nombres} ${inc.apellidos}`,
+          Fecha: inc.fecha,
+          Tipo: inc.tipo,
+          Duración: minutosAHHMM(inc.minutos),
+          Observación: inc.observacion
+        }))
+      )
+
+      const hojaAusencias = XLSX.utils.json_to_sheet(
+        resAusencias.data.map(a => ({
+          Empleado: `${a.nombres} ${a.apellidos}`,
+          Fecha: a.fecha,
+          Observación: a.observacion
+        }))
+      )
+
+      const hojaResumen = XLSX.utils.json_to_sheet(resumenes)
+
+      const libro = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(libro, hojaResumen, 'Resumen')
+      XLSX.utils.book_append_sheet(libro, hojaAsistencias, 'Asistencias')
+      XLSX.utils.book_append_sheet(libro, hojaIncidencias, 'Incidencias')
+      XLSX.utils.book_append_sheet(libro, hojaAusencias, 'Ausencias')
+
+      const nombreArchivo = `reporte_completo_${filtros.fecha_inicio}_${filtros.fecha_fin}.xlsx`
+      saveAs(new Blob([XLSX.write(libro, { bookType: 'xlsx', type: 'array' })]), nombreArchivo)
+      mostrarMensaje('Reporte exportado exitosamente')
+    } catch (err) {
+      mostrarMensaje('Error al exportar reporte', 'error')
+    } finally {
+      setCargando(false)
+    }
+  }
+
   const inputClass = "px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
   const labelClass = "block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
 
   const tabs = [
     { id: 'asistencias', label: 'Asistencias' },
     { id: 'incidencias', label: 'Incidencias' },
+    { id: 'ausencias', label: 'Ausencias' },
     { id: 'resumen', label: 'Resumen' },
   ]
 
@@ -182,12 +265,63 @@ export default function Reportes() {
     </form>
   )
 
+  const registrarAusencias = async () => {
+    setRegistrando(true)
+    try {
+      const r = await api.post(`/reportes/ausencias/registrar?fecha_str=${filtros.fecha_inicio}`)
+      setResultadoRegistro(r.data)
+      mostrarMensaje(`Se registraron ${r.data.ausentes_registrados} ausencias`, 'success')
+      buscarAusencias({ preventDefault: () => {} })
+    } catch (err) {
+      mostrarMensaje('Error al registrar ausencias', 'error')
+    } finally {
+      setRegistrando(false)
+    }
+  }
+
+  const buscarAusencias = async (e) => {
+    e.preventDefault()
+    setCargando(true)
+    try {
+      const params = { fecha_inicio: filtros.fecha_inicio, fecha_fin: filtros.fecha_fin }
+      if (filtros.id_empleado) params.id_empleado = filtros.id_empleado
+      const r = await api.get('/reportes/ausencias', { params })
+      setAusencias(r.data)
+    } catch (err) {
+      mostrarMensaje('Error al cargar ausencias', 'error')
+    } finally {
+      setCargando(false)
+    }
+  }
+
   return (
     <div>
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Reportes</h1>
-        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Consulta y exporta información del sistema</p>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Reportes</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Consulta y exporta información del sistema</p>
+        </div>
+        <div className="flex gap-3 items-center">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Fecha inicio</label>
+            <input type="date" value={filtros.fecha_inicio}
+              onChange={(e) => setFiltros({ ...filtros, fecha_inicio: e.target.value })}
+              className="px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Fecha fin</label>
+            <input type="date" value={filtros.fecha_fin}
+              onChange={(e) => setFiltros({ ...filtros, fecha_fin: e.target.value })}
+              className="px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div className="mt-4">
+            <button onClick={exportarReporteCompleto} disabled={cargando}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors whitespace-nowrap">
+              {cargando ? 'Generando...' : '⬇ Excel Completo'}
+            </button>
+          </div>
+        </div>
       </div>
 
       {mensaje && (
@@ -318,6 +452,73 @@ export default function Reportes() {
         </div>
       )}
 
+      {/* AUSENCIAS */}
+      {tab === 'ausencias' && (
+        <div>
+          <FiltroBar onSubmit={buscarAusencias} mostrarExportar={false} />
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-4 mb-6 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-900 dark:text-white">Registrar ausencias del día</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Detecta automáticamente qué empleados con horario no asistieron en la fecha de inicio seleccionada
+              </p>
+            </div>
+            <button onClick={registrarAusencias} disabled={registrando}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors whitespace-nowrap">
+              {registrando ? 'Procesando...' : '⚠️ Registrar ausencias'}
+            </button>
+          </div>
+
+          {resultadoRegistro && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 mb-6">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-400">
+                {resultadoRegistro.ausentes_registrados === 0
+                  ? 'No hay nuevas ausencias para registrar en esa fecha'
+                  : `Se registraron ${resultadoRegistro.ausentes_registrados} ausencias:`}
+              </p>
+              {resultadoRegistro.empleados.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {resultadoRegistro.empleados.map((nombre, i) => (
+                    <li key={i} className="text-sm text-amber-700 dark:text-amber-300">• {nombre}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
+                  {['Empleado', 'Fecha', 'Observación'].map(h => (
+                    <th key={h} className="px-6 py-4 font-medium">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {ausencias.length === 0 ? (
+                  <tr><td colSpan="3" className="px-6 py-8 text-center text-gray-400">
+                    Selecciona un rango de fechas y presiona Buscar
+                  </td></tr>
+                ) : (
+                  ausencias.map((a, i) => (
+                    <tr key={i} className="border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                      <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{a.nombres} {a.apellidos}</td>
+                      <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{a.fecha}</td>
+                      <td className="px-6 py-4">
+                        <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                          {a.observacion}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* RESUMEN */}
       {tab === 'resumen' && (
         <div>
@@ -354,48 +555,98 @@ export default function Reportes() {
 
           {resumen && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {[
-                  { label: 'Días asistidos', valor: resumen.resumen_asistencia.dias_asistidos, color: 'text-indigo-600 dark:text-indigo-400' },
-                  { label: 'Total horas trabajadas', valor: resumen.resumen_asistencia.total_horas ?? 0, color: 'text-green-600 dark:text-green-400' },
-                  { label: 'Días incompletos', valor: resumen.resumen_asistencia.dias_incompletos, color: 'text-amber-600 dark:text-amber-400' },
+                  { label: 'Días asistidos', valor: resumen.resumen.dias_asistidos, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-900' },
+                  { label: 'Días ausentes', valor: resumen.resumen.dias_ausentes, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-900' },
+                  { label: 'Días libres', valor: resumen.resumen.dias_libres, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-900' },
+                  { label: 'Total horas', valor: resumen.resumen.total_horas, color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-100 dark:border-indigo-900' },
+                  { label: 'Tardanzas', valor: resumen.resumen.tardanzas, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20 border-orange-100 dark:border-orange-900' },
+                  { label: 'Almuerzos extendidos', valor: resumen.resumen.almuerzos_extendidos, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20 border-purple-100 dark:border-purple-900' },
+                  { label: 'Salidas anticipadas', valor: resumen.resumen.salidas_anticipadas, color: 'text-pink-600 dark:text-pink-400', bg: 'bg-pink-50 dark:bg-pink-900/20 border-pink-100 dark:border-pink-900' },
+                  { label: 'Días incompletos', valor: resumen.resumen.dias_incompletos, color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-800 border-gray-100 dark:border-gray-700' },
                 ].map((item) => (
-                  <div key={item.label} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-5 text-center">
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{item.label}</p>
-                    <p className={`text-3xl font-bold mt-1 ${item.color}`}>{item.valor}</p>
+                  <div key={item.label} className={`rounded-2xl border p-4 text-center ${item.bg}`}>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{item.label}</p>
+                    <p className={`text-3xl font-bold ${item.color}`}>{item.valor}</p>
                   </div>
                 ))}
               </div>
 
-              {resumen.incidencias_por_tipo.length > 0 && (
-                <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
-                  <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800">
-                    <h3 className="font-semibold text-gray-900 dark:text-white">Incidencias por tipo</h3>
-                  </div>
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
-                        <th className="px-6 py-4 font-medium">Tipo</th>
-                        <th className="px-6 py-4 font-medium">Cantidad</th>
-                        <th className="px-6 py-4 font-medium">Total tiempo</th>
+              <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-x-auto">
+                <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+                  <h3 className="font-semibold text-gray-900 dark:text-white">Detalle por día</h3>
+                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
+                      {['Fecha', 'Estado', 'Entrada', 'Salida', 'Horas', 'Incidencias'].map(h => (
+                        <th key={h} className="px-6 py-4 font-medium">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resumen.dias_libres.map((dl, i) => (
+                      <tr key={`libre-${i}`} className="border-b border-gray-50 dark:border-gray-800 bg-amber-50/50 dark:bg-amber-900/10">
+                        <td className="px-6 py-3 text-gray-600 dark:text-gray-400">{dl.fecha}</td>
+                        <td className="px-6 py-3">
+                          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                            🏖️ Libre
+                          </span>
+                        </td>
+                        <td className="px-6 py-3 text-gray-400">—</td>
+                        <td className="px-6 py-3 text-gray-400">—</td>
+                        <td className="px-6 py-3 text-gray-400">—</td>
+                        <td className="px-6 py-3 text-xs text-amber-600 dark:text-amber-400">{dl.motivo}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {resumen.incidencias_por_tipo.map((inc, i) => (
-                        <tr key={i} className="border-b border-gray-50 dark:border-gray-800">
-                          <td className="px-6 py-4">
-                            <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                              {inc.tipo}
+                    ))}
+                    {resumen.detalle.length === 0 ? (
+                      <tr><td colSpan="6" className="px-6 py-8 text-center text-gray-400">No hay registros en este período</td></tr>
+                    ) : (
+                      resumen.detalle.map((d, i) => (
+                        <tr key={i} className={`border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
+                          d.estado === 'ausente' ? 'bg-red-50/50 dark:bg-red-900/10' : ''
+                        }`}>
+                          <td className="px-6 py-3 text-gray-600 dark:text-gray-400">{d.fecha}</td>
+                          <td className="px-6 py-3">
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                              d.estado === 'completo'
+                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                : d.estado === 'ausente'
+                                  ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                  : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                            }`}>
+                              {d.estado}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{inc.cantidad}</td>
-                          <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{minutosAHHMM(inc.total_minutos)}</td>
+                          <td className="px-6 py-3 text-gray-600 dark:text-gray-400">
+                            {d.hora_entrada ? String(d.hora_entrada).slice(0, 5) : '—'}
+                          </td>
+                          <td className="px-6 py-3 text-gray-600 dark:text-gray-400">
+                            {d.hora_salida ? String(d.hora_salida).slice(0, 5) : '—'}
+                          </td>
+                          <td className="px-6 py-3 text-gray-600 dark:text-gray-400">
+                            {d.horas_trabajadas > 0 ? `${d.horas_trabajadas}h` : '—'}
+                          </td>
+                          <td className="px-6 py-3">
+                            {d.incidencias.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {d.incidencias.map((inc, j) => (
+                                  <span key={j} className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                                    {inc.tipo}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 text-xs">—</span>
+                            )}
+                          </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>

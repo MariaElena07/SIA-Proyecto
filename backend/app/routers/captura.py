@@ -80,3 +80,18 @@ def correr_entrenamiento():
         subprocess.run([sys.executable, "app/services/entrenar_modelo.py"], check=True)
     except Exception as e:
         print(f"Error en entrenamiento: {e}")
+
+@router.delete("/fotos/{id_empleado}")
+def eliminar_fotos(id_empleado: int):
+    carpeta = f"rostros_dataset/{id_empleado}"
+    if not os.path.exists(carpeta):
+        return {"mensaje": "No hay fotos para eliminar", "total_eliminadas": 0}
+    
+    fotos = [f for f in os.listdir(carpeta) if f.endswith('.jpg')]
+    for foto in fotos:
+        os.remove(os.path.join(carpeta, foto))
+    
+    return {
+        "mensaje": f"Se eliminaron {len(fotos)} fotos exitosamente",
+        "total_eliminadas": len(fotos)
+    }
